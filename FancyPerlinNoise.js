@@ -15,6 +15,21 @@
 // Email:   fredpan0821@gmail.com
 // ==========================================================================
 // $Log: PerlinNoise.js,v $
+// Revision 1.0   2019/04/01 15:36:39  Liren
+// Implemented the refine functionality
+// Added the color controls for the teapot
+// Beautify the teapot display
+//
+// Revision 0.9   2019/04/01 12:51:00  Liren
+// Fixed bug with fancy world map generation
+// Second try to implement refining algorithm
+//
+// Revision 0.8   2019/04/01 12:51:00  Liren
+// Implemented auto run
+//
+// Revision 0.7   2019/04/01 12:51:00  Liren
+// Fixed bug with normal calculation
+//
 // Revision 0.6   2019/04/01 01:11:27  Liren
 // Created controllers for all the existing attributes
 //
@@ -61,16 +76,23 @@ var selectedShape = 'plane';
 var noiseTextureTurbulence = 0.005;
 var noiseTextureWidth = 512;
 var noiseTextureHeight = 512;
+var colorOffsetR = 255;
+var colorOffsetG = 255;
+var colorOffsetB = 255;
 
 //Global variables for the fancy map (Geometry)
 var planeAngle = 110;
 var planeWidth = 93;
 var planeHeight = 39;
 var planeScale = 21;
-var planeZCoordinateScale = 100;
+var planeZCoordinateScale = 221;
 var planeZCoordinateTurbulence = 0.06;
+var animateTime = 1; // third dimesion for perlin noise
+var isAnimating = false;
+var animateSpeed = 0.01;
 
 //Global variables for the fancy map (Texture)
+var worldMapFineness = 1;
 // map thickness
 var peakPercent = 0.9; // (if = 0.9) top 10 % of the highest altitude is the peak
 var mountainPercent = 0.5; // (if = 0.5) top 50 % of the highest altitude is the peak
@@ -171,7 +193,7 @@ function init(){
 	//create geometry for plane when init
 	perlinGeo = createPlane();
 	worldColorArray = simulateRealWorld();
-	worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+	worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 	worldTexture.needsUpdate = true;
 
 
@@ -201,7 +223,7 @@ function init(){
     info.style.width = '100%';
     info.style.textAlign = 'center';
     info.style.color = "lightblue";
-    info.innerHTML = "<p>The Magic Teapot</p><p>Created by &copy 2019 <a  href='https://github.com/fredpan'>Liren Pan</a></p>";
+    info.innerHTML = "<p>The Fancy Perlin Noise</p><p>Created by &copy 2019 <a  href='https://github.com/fredpan'>Liren Pan</a></p>";
     container.appendChild(info);
 
 	initGUI();
@@ -244,8 +266,10 @@ function initGUI(){
 		this.envMapping = false;
 		this.skyboxTheme = 'blood_valley';
 
-		this.noiseSize = 5;
+		this.noiseSize = 9;
 		this.noiseTextureTurbulence = 0.005;
+
+		this.colorOffset = '#ffffff';
 	}
 
 	planeControllers = new function(){
@@ -263,6 +287,11 @@ function initGUI(){
 		this.mountainColor = mountainColor;
 		this.landColor = landColor;
 		this.oceanColor = oceanColor;
+		this.worldMapFineness = worldMapFineness;
+
+		this.planeMaterial = "phong";
+
+		this.animateSpeed = animateSpeed;
 	}
 
 	gui = new dat.GUI();
@@ -367,29 +396,85 @@ function controllersForTeapot(){
 	teapotBumpControl.add(teapotControllers, "bumpScale", 0, 1).name("Bump Scale").onChange(render);
 
 	teapotNoiseControl = teapotCtrl.addFolder("Perlin Noise Control");
-	teapotNoiseControl.add(teapotControllers, "noiseSize", 3, 11).listen().name("Noise Size").onChange(
+	teapotNoiseControl.add(teapotControllers, "noiseSize", 7, 11).listen().name("Noise Size").onChange(
 		function(value){
 			value = Math.round(value);//round up number
 			teapotControllers.noiseSize = value;// set the display back first
 			value = Math.pow(2, value);// then operate data
 			noiseTextureWidth = value;
 			noiseTextureHeight = value;
+			console.log(value);
 			generatePerlinTexture();
 			render();
 		});
-	teapotNoiseControl.add(teapotControllers, "noiseTextureTurbulence", 0.001, 0.1).name("Noise Turbulence").onChange(
+	teapotNoiseControl.add(teapotControllers, "noiseTextureTurbulence", 0.001, 0.02).name("Noise Turbulence").onChange(
 		function(value){
 			noiseTextureTurbulence = value;
 			generatePerlinTexture();
 			render();
 		});
+	teapotNoiseControl.addColor(teapotControllers, 'colorOffset').name('Noise Color').onChange(function(value){
+		var color = value;
+		var r = getR(color);
+		var g = getG(color);
+		var b = getB(color);
+		colorOffsetR = r;
+		colorOffsetG = g;
+		colorOffsetB = b;
+		generatePerlinTexture();
+		render();
+	});
 }
 
 function controllersForPlane(){
 
-// shape.rotation.x = -50 * Math.PI/180;
-	fancyMapGeoControl =planeCtrl.addFolder("Fancy Map Geometry Controls");
-	fancyMapGeoControl.add(planeControllers, "planeWidth", 88, 120).listen().name("Map Width").onChange(
+	//autoRun
+	function animate(){
+		animation = requestAnimationFrame( animate );
+		animateTime += animateSpeed;
+		perlinGeo = createPlane();
+		worldColorArray = simulateRealWorld();
+		worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
+		worldTexture.needsUpdate = true;
+		render();
+	}
+	autoRunBtn = { add:function(){
+				if (!isAnimating) {
+					animate();
+					isAnimating = true;
+				}else{
+					if (animation == null) {
+						throw new Error("Animation undefined, cannot stop animation!");
+					}
+					window.cancelAnimationFrame(animation);
+					isAnimating = false;
+				}
+				
+	} };
+
+	planeCtrl.add(planeControllers, "animateSpeed", 0.005, 0.1).listen().name("Animation Speed").onChange(function(value) {animateSpeed = value;} );
+
+	planeCtrl.add(autoRunBtn, "add").name("Crustal Movement :)");
+
+	planeCtrl.add(
+		planeControllers, 
+		"planeMaterial", 
+		{
+			"Phong" : "phong", 
+			"Wireframe" : "wireframe", 
+		})
+	.name("Select Material")
+	.onChange(
+		function(value){
+			if (value == 'phong') {
+				planeControllers.planeMaterial = 'phong';
+			} else if (value == 'wireframe') {
+				planeControllers.planeMaterial = 'wireframe';
+			}
+			render();
+		});
+
+	planeCtrl.add(planeControllers, "planeWidth", 88, 120).listen().name("Map Width").onChange(
 		function(value){
 			value = Math.round(value);
 			if (value%2 != 0) {
@@ -399,12 +484,12 @@ function controllersForPlane(){
 			planeWidth = value;
 			perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
 
-	fancyMapGeoControl.add(planeControllers, "planeHeight", 21, 120).listen().name("Map Height").onChange(
+	planeCtrl.add(planeControllers, "planeHeight", 21, 120).listen().name("Map Height").onChange(
 		function(value){
 			value = Math.round(value);//round up number
 			if (value%2 != 0) {
@@ -414,115 +499,125 @@ function controllersForPlane(){
 			planeHeight = value;
 			perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
 
-	fancyMapGeoControl.add(planeControllers, "planeScale", 1, 33).listen().name("Map Scale").onChange(
+	planeCtrl.add(planeControllers, "planeScale", 1, 33).listen().name("Map Scale").onChange(
 		function(value){
 			value = Math.round(value);
 			planeControllers.planeScale = value;
 			planeScale = value;
 			perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
-	fancyMapGeoControl.add(planeControllers, "planeZCoordinateScale", 1, 500).listen().name("Z Axis Scale").onChange(
+	planeCtrl.add(planeControllers, "planeZCoordinateScale", 1, 500).listen().name("Z Axis Scale").onChange(
 		function(value){
 			// value = Math.round(value);
 			planeControllers.planeZCoordinateScale = value;
 			planeZCoordinateScale = value;
 			perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
-	fancyMapGeoControl.add(planeControllers, "planeZCoordinateTurbulence", 0.001, 0.1).listen().name("Map Turbulence").onChange(
+	planeCtrl.add(planeControllers, "planeZCoordinateTurbulence", 0.001, 0.1).listen().name("Map Turbulence").onChange(
 		function(value){
 			// value = Math.round(value);
 			planeControllers.planeZCoordinateTurbulence = value;
 			planeZCoordinateTurbulence = value;
 			perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
 
-	fancyMapGeoControl.add(planeControllers, "peakPercent", 0.05, 0.5).listen().name("Number of peak").onChange(
+	planeCtrl.add(planeControllers, "peakPercent", 0.05, 0.5).listen().name("Number of peak").onChange(
 		function(value){
 			planeControllers.peakPercent = value;
 			value = 1 - value;
 			peakPercent = value;
 			// perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
-	fancyMapGeoControl.add(planeControllers, "mountainPercent", 0.3, 0.8).listen().name("Number of mountain").onChange(
+	planeCtrl.add(planeControllers, "mountainPercent", 0.3, 0.8).listen().name("Number of mountain").onChange(
 		function(value){
 			planeControllers.mountainPercent = value;
 			value = 1 - value;
 			mountainPercent = value;
 			// perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
-	fancyMapGeoControl.add(planeControllers, "landPercent", 0.5, 0.95).listen().name("Number of land").onChange(
+	planeCtrl.add(planeControllers, "landPercent", 0.5, 0.95).listen().name("Number of land").onChange(
 		function(value){
 			planeControllers.landPercent = value;
 			value = 1 - value;
 			landPercent = value;
 			// perlinGeo = createPlane();
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
 
-	fancyMapGeoControl.addColor(planeControllers, 'peakColor').name('Peak Color').onChange(
+	planeCtrl.addColor(planeControllers, 'peakColor').name('Peak Color').onChange(
 		function(value){
 			planeControllers.peakColor = value;
 			peakColor = value;
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
 
-	fancyMapGeoControl.addColor(planeControllers, 'mountainColor').name('mountain Color').onChange(
+	planeCtrl.addColor(planeControllers, 'mountainColor').name('mountain Color').onChange(
 		function(value){
 			planeControllers.mountainColor = value;
 			mountainColor = value;
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
 
-	fancyMapGeoControl.addColor(planeControllers, 'landColor').name('Land Color').onChange(
+	planeCtrl.addColor(planeControllers, 'landColor').name('Land Color').onChange(
 		function(value){
 			planeControllers.landColor = value;
 			landColor = value;
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
 
-	fancyMapGeoControl.addColor(planeControllers, 'oceanColor').name('Ocean Color').onChange(
+	planeCtrl.addColor(planeControllers, 'oceanColor').name('Ocean Color').onChange(
 		function(value){
 			planeControllers.oceanColor = value;
 			oceanColor = value;
 			worldColorArray = simulateRealWorld();
-			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth, planeHeight, THREE.RGBAFormat);
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
+			worldTexture.needsUpdate = true;
+			render();
+		});
+	planeCtrl.add(planeControllers, 'worldMapFineness', 1, 21).listen().name('World Map Fineness').onChange(
+		function(value){
+			value = Math.round(value);
+			planeControllers.worldMapFineness = value;
+			worldMapFineness = value;
+			worldColorArray = simulateRealWorld();
+			worldTexture = new THREE.DataTexture(worldColorArray, planeWidth * worldMapFineness, planeHeight * worldMapFineness, THREE.RGBAFormat);
 			worldTexture.needsUpdate = true;
 			render();
 		});
@@ -585,16 +680,12 @@ function render() {
 	scene.remove( shape );
 	if (selectedShape == 'teapot') {
 		phongMaterial = new THREE.MeshPhongMaterial( { color: materialColor, envMap: envMap, side: THREE.DoubleSide} );
-		phongMaterial.combine = THREE.MixOperation;
+		phongMaterial.combine = THREE.AddOperation;
 		geo = teapotGeo;
 		renderTeapot();
 		shape = new THREE.Mesh(geo, phongMaterial);
 	} else if (selectedShape == 'plane') {
-		phongMaterial = new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
-		// phongMaterial = new THREE.MeshPhongMaterial( { color: materialColor, side: THREE.DoubleSide} );
-		geo = perlinGeo;
-		phongMaterial.map = worldTexture;
-		shape = new THREE.Mesh(geo, phongMaterial);
+		renderPlane();
 		shape.rotation.x = -39 * Math.PI/180;
 	} else{
 		throw new Error('404: Shape not found!');
@@ -602,12 +693,6 @@ function render() {
 
 	// =========   End Shape Switcher   =========
 
-//todo
-// var wireframe = new THREE.WireframeGeometry( geo );
-// shape = new THREE.LineSegments( wireframe );
-// shape.material.depthTest = false;
-// shape.material.opacity = 0.25;
-// shape.material.transparent = true;
 	scene.add(shape);
 
 	// =========   Light Render   =========
@@ -694,6 +779,28 @@ function renderTeapot(){
 
 }
 
+function renderPlane(){
+	if (planeControllers.planeMaterial == "phong") {
+		// hongMaterial = new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
+		phongMaterial = new THREE.MeshPhongMaterial( { color: materialColor} );
+		geo = perlinGeo;
+		phongMaterial.map = worldTexture;
+		shape = new THREE.Mesh(geo, phongMaterial);
+	} else if (planeControllers.planeMaterial == "wireframe") {
+		geo = perlinGeo;
+		var wireframe = new THREE.WireframeGeometry( geo );
+
+		var mat = new THREE.LineBasicMaterial( { color: 0xffffff, linewidth: 2 } );
+
+		shape = new THREE.LineSegments( wireframe, mat );
+		shape.material.depthTest = false;
+		shape.material.opacity = 0.25;
+		shape.rotation.x = -39 * Math.PI/180;
+	} else {
+		throw new Error("Unsupported material!");
+	}
+}
+
 function createPlane(){
 	var geometry = new THREE.Geometry();
 	planeZs = [];// the generated z coordinate for each vertix. Generated by Perlin Noise
@@ -704,7 +811,7 @@ function createPlane(){
 		planeZs[y] = planeRow;
 		var xoff = 0;// offset of x
 		for (var x = 0; x < planeWidth; x ++) {
-			planeZs[y][x] = Math.abs(noise.simplex2(xoff, yoff)) * planeZCoordinateScale;//Math.random(10) * 100;
+			planeZs[y][x] = Math.abs(noise.perlin3(xoff, yoff, animateTime)) * planeZCoordinateScale;//Math.random(10) * 100;
 			xoff += planeZCoordinateTurbulence;
 		}
 		yoff += planeZCoordinateTurbulence;
@@ -712,26 +819,32 @@ function createPlane(){
 
 	// Start to generate vertices
 	var ctr = 0;// counter for vertices
-	for (var y = -planeHeight/2; y < planeHeight/2 - 1; y ++) {//Math.abs(noise.simplex2(xoff, yoff))
-		for (var x = -planeWidth/2; x < planeWidth/2 - 1; x ++) {
-				// x, y, 							zLists[y/planeScale + planeHeight/2]		[x/planeScale + planeWidth/2],			//0
-				// x + increment, y, 				zLists[y/planeScale + planeHeight/2]		[x/planeScale + planeWidth/2 + 1],		//1
-				// x, y + increment, 				zLists[y/planeScale + planeHeight/2 + 1]	[x/planeScale + planeWidth/2],			//2
+	for (var y = -planeHeight/2; y < planeHeight/2 - 1; y ++) {//Math.abs(noise.perlin3(xoff, yoff, animateTime))
+		for (var x = -planeWidth/2; x < planeWidth/2 - 1; x ++) {																							
+		// Sample:
+				// (0, 1)-------------(1, 1)
+				// 		 |.		     |
+				//       |    .		 |
+				//		 | 	  	 .   |
+				// 		 |		    .|
+				// (0, 0)-------------(1, 0)
 
-				// x, y + increment, 				zLists[y/planeScale + planeHeight/2 + 1]	[x/planeScale + planeWidth/2],			//2
-				// x + increment, y + increment, 	zLists[y/planeScale + planeHeight/2 + 1]	[x/planeScale + planeWidth/2 + 1],		//3
-				// x + increment, y,  				zLists[y/planeScale + planeHeight/2]		[x/planeScale + planeWidth/2 + 1]		//1
-				
 				//push vertices
+				// 0 (  ctr  ): (0, 0)
 				geometry.vertices.push(new THREE.Vector3(x * planeScale, 				y * planeScale,					planeZs[y * planeScale/planeScale + planeHeight/2][x * planeScale/planeScale + planeWidth/2]));
+				// 1 (ctr + 1): (1, 0)
 				geometry.vertices.push(new THREE.Vector3(x * planeScale + planeScale, 	y * planeScale, 				planeZs[y * planeScale/planeScale + planeHeight/2][x * planeScale/planeScale + planeWidth/2 + 1]));
+				// 2 (ctr + 2): (0, 1)
 				geometry.vertices.push(new THREE.Vector3(x * planeScale, 				y  * planeScale+ planeScale, 	planeZs[y * planeScale/planeScale + planeHeight/2 + 1][x * planeScale/planeScale + planeWidth/2]));
+				// 3 (ctr + 3): (1, 1)
 				geometry.vertices.push(new THREE.Vector3(x * planeScale + planeScale, 	y * planeScale + planeScale, 	planeZs[y * planeScale/planeScale + planeHeight/2 + 1][x * planeScale/planeScale + planeWidth/2 + 1]));
 				
 				//create faces with normal vector and push them. Each rect requires two faces
-				var face1 = new THREE.Face3(ctr, ctr+1, ctr+2, new THREE.Vector3( 0, 1, 0 ));
+				// (0, 0) -> (1, 0), (1, 0) -> (0, 1)
+				var face1 = new THREE.Face3(ctr, ctr+1, ctr+2);
 				geometry.faces.push( face1 );
-				var face2 = new THREE.Face3(ctr+2, ctr+3, ctr+1, new THREE.Vector3( 0, 1, 0 ) );
+				// (1, 1) -> (0, 1), (0, 1) -> (1, 0)
+				var face2 = new THREE.Face3(ctr+3, ctr+2, ctr+1);
 				geometry.faces.push( face2 );
 				ctr = ctr + 4;// since each rect requires 4 vertices
 		}
@@ -763,8 +876,6 @@ function createPlane(){
     	]);
 	}
 	geometry.uvsNeedUpdate = true;
-
-// bgeometry = new THREE.BufferGeometry().fromGeometry(geometry);
 	return geometry;
 }
 
@@ -788,13 +899,17 @@ function simulateRealWorld(){
 		mountain = highestAltitude * mountainPercent;
 		land = highestAltitude * landPercent;
 
-		var colorArray = new Uint8Array(4 * noiseTextureWidth * noiseTextureHeight);
+		var colorArray = new Uint8Array(4 * planeWidth * planeHeight * worldMapFineness * worldMapFineness);
 		ctr = 0;// counter for the colorArray
+
 		for (var i = 0; i < planeZs.length; i ++) {
+			var currXLayer = new Uint8Array(4 * planeWidth * worldMapFineness);
+			var xLCtr = 0;
 			for (var j = 0; j < planeZs[i].length; j ++) {
 				var r;
 				var g;
 				var b;
+
 				if (planeZs[i][j] >= peak) { // peak
 					r = getR(peakColor);
 					g = getG(peakColor);
@@ -812,15 +927,76 @@ function simulateRealWorld(){
 					g = getG(oceanColor);
 					b = getB(oceanColor);
 				}
-				colorArray[ctr] = r;
-				colorArray[ctr + 1] = g;
-				colorArray[ctr + 2] = b;
-				colorArray[ctr + 3] = 255;
-				ctr = ctr + 4; // plus 4 because we used the RGBA format
+				if (r==0 && g==0 && b==0) {
+					throw new Error("Wrong Color Format: " + planeZs[i][j]);
+				}
+				for (var pixel = 0; pixel < worldMapFineness; pixel ++) {
+					colorArray[ctr] = r;
+					colorArray[ctr + 1] = g;
+					colorArray[ctr + 2] = b;
+					colorArray[ctr + 3] = 255;
+					ctr = ctr + 4; // plus 4 because we used the RGBA format
+					currXLayer[xLCtr] = r;
+					currXLayer[xLCtr + 1] = g;
+					currXLayer[xLCtr + 2] = b;
+					currXLayer[xLCtr + 3] = 255;
+					xLCtr = xLCtr + 4;
+				}
 			}
+			for (var pixel = 0; pixel < worldMapFineness - 1; pixel ++) {
+					//process currXLayer, the layer that copied from its upper layer
+					colorArray.set(currXLayer, ctr);
+					ctr = ctr + xLCtr;
+				}
+		}
+
+		for (var round = 1; round < worldMapFineness; round++) {
+				colorArray = refineTexture(colorArray, worldMapFineness);
 		}
 		return colorArray;
 	}
+}
+
+function refineTexture(textureArray, fineness){
+
+	for (var pixel = 0; pixel < textureArray.length; pixel +=4) {
+		
+		var curr = pixel;
+		
+		var left = pixel - 4;
+		var right = pixel + 4;
+		var up = pixel + planeWidth * fineness * 4;
+		var down = pixel - planeWidth * fineness * 4;
+		
+		var upperLeft = pixel + planeWidth * fineness * 4 - 4;
+		var upperRight = pixel + planeWidth * fineness * 4 + 4;
+		var lowerLeft = pixel - planeWidth * fineness * 4 - 4;
+		var lowerRight = pixel - planeWidth * fineness * 4 + 4;
+		
+		//									R 												G 													B
+		// var isLeftSame = textureArray[curr] == textureArray[left] && textureArray[curr + 1] == textureArray[left + 1] && textureArray[curr + 2] == textureArray[left + 2];
+		var isRightSame = textureArray[curr] == textureArray[right] && textureArray[curr + 1] == textureArray[right + 1] && textureArray[curr + 2] == textureArray[right + 2];
+		var isUpSame = textureArray[curr] == textureArray[up] && textureArray[curr + 1] == textureArray[up + 1] && textureArray[curr + 2] == textureArray[up + 2];
+		var isDOwnSame = textureArray[curr] == textureArray[down] && textureArray[curr + 1] == textureArray[down + 1] && textureArray[curr + 2] == textureArray[down + 2];
+
+		var isUpperLeftSame = 	textureArray[curr] == textureArray[upperLeft] 	&& textureArray[curr + 1] == textureArray[upperLeft + 1] 	&& textureArray[curr + 2] == textureArray[upperLeft + 2];
+		// var isUpperRightSame = 	textureArray[curr] == textureArray[upperRight] 	&& textureArray[curr + 1] == textureArray[upperRight + 1] 	&& textureArray[curr + 2] == textureArray[upperRight + 2];
+		var isLowerLeftSame = 	textureArray[curr] == textureArray[lowerLeft] 	&& textureArray[curr + 1] == textureArray[lowerLeft + 1] 	&& textureArray[curr + 2] == textureArray[lowerLeft + 2];
+		// var isLowerRightSame = 	textureArray[curr] == textureArray[lowerRight] 	&& textureArray[curr + 1] == textureArray[lowerRight + 1] 	&& textureArray[curr + 2] == textureArray[lowerRight + 2];
+		
+		// deal with botton right
+		if (lowerRight < textureArray.length && upperRight < textureArray.length & lowerRight > 0 && upperRight > 0) {
+			if (!isRightSame && !isDOwnSame && !isLowerLeftSame) { // elimite button right corner
+				assignColor(textureArray, curr, getColor(textureArray ,lowerRight));
+			}
+			// deal with top right
+			if (!isRightSame && !isUpSame && !isUpperLeftSame) {
+				assignColor(textureArray, curr, getColor(textureArray ,upperRight));
+			}
+		}
+		
+	}
+	return textureArray;
 }
 
 function hexToRgbA(hex){
@@ -861,9 +1037,12 @@ function generatePerlinTexture(){
 	for (var y = 0; y < noiseTextureHeight; y ++) {
 		var xoff = 0;
 		for (var x = 0; x < noiseTextureWidth; x ++) {
-		 	var r = Math.abs(noise.simplex2(xoff, yoff)) * (255 + 1);
-			var g = Math.abs(noise.simplex2(xoff, yoff)) * (255 + 1);
-			var b = Math.abs(noise.simplex2(xoff, yoff)) * (255 + 1);
+		 	var r = (1 - Math.abs(noise.perlin2(xoff, yoff))) * colorOffsetR;
+			var g = (1 - Math.abs(noise.perlin2(xoff, yoff))) * colorOffsetG;
+			var b = (1 - Math.abs(noise.perlin2(xoff, yoff))) * colorOffsetB;
+			// var r = colorOffsetR;
+			// var g = colorOffsetG;
+			// var b = colorOffsetB;
 			var i = ((y * noiseTextureWidth) + x) * 4;
 			textureArray[i] = r;
 			textureArray[i + 1] = g;
@@ -880,6 +1059,33 @@ function generatePerlinTexture(){
 	perlinTexture.repeat.set( 2, 2 );
 	perlinTexture.anisotropy = 21;
 	//END OF INIT PERLIN NOISE MATERIALS
+}
+
+function assignColor( array,index, colorInHex) {
+	array[index] = getR(colorInHex);
+	array[index + 1] = getG(colorInHex);
+	array[index + 2] = getB(colorInHex);
+	array[index + 3] = 255;
+}
+
+function getColor(array ,index){
+	var isPeak = 		array[index] == getR(peakColor) 		&& array[index + 1] == getG(peakColor) 		&& array[index + 2] == getB(peakColor);
+	var isMountain = 	array[index] == getR(mountainColor) 	&& array[index + 1] == getG(mountainColor) 	&& array[index + 2] == getB(mountainColor);
+	var isLand = 		array[index] == getR(landColor) 		&& array[index + 1] == getG(landColor) 		&& array[index + 2] == getB(landColor);
+	var isOcean = 		array[index] == getR(oceanColor) 		&& array[index + 1] == getG(oceanColor) 	&& array[index + 2] == getB(oceanColor);
+	var currColor = null;
+	if (isPeak) {
+		currColor = peakColor;
+	} else if (isMountain) {
+		currColor = mountainColor;
+	} else if (isLand){
+		currColor = landColor;
+	} else if (isOcean) {
+		currColor = oceanColor;
+	} else {
+		throw new Error("Current Pixel has wrong color format. The index is: " + index + " R: " + array[index] + ", G: " + array[index + 1] + ", B: " + array[index+2]);
+	}
+	return currColor;
 }
 
 
