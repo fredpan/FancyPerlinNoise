@@ -8,13 +8,21 @@
 //
 //    Liren Pan
 //    https://www.fredpan.cn
-//	  Available on: https://github.com/fredpan
-//	  Published on: https://github.com/fredpan
+//	  https://github.com/fredpan
 //
 // Creator: Liren Pan
 // Email:   fredpan0821@gmail.com
+//
+// The Perlin Noise library was implemented by Seph Gentle.
+// Available on: https://github.com/josephg/noisejs
+//
 // ==========================================================================
 // $Log: PerlinNoise.js,v $
+// Revision 1.1   2019/04/07 00:33:44  Liren
+// Clean the code: removed all unused code
+// Improved the control
+// Fixed "bug" with map scale
+//
 // Revision 1.0   2019/04/01 15:36:39  Liren
 // Implemented the refine functionality
 // Added the color controls for the teapot
@@ -81,11 +89,11 @@ var colorOffsetG = 255;
 var colorOffsetB = 255;
 
 //Global variables for the fancy map (Geometry)
-var planeAngle = 110;
-var planeWidth = 93;
-var planeHeight = 39;
+var planeAngle = -51;
+var planeWidth = 133;
+var planeHeight = 69;
 var planeScale = 21;
-var planeZCoordinateScale = 221;
+var planeZCoordinateScale = 9;
 var planeZCoordinateTurbulence = 0.06;
 var animateTime = 1; // third dimesion for perlin noise
 var isAnimating = false;
@@ -126,66 +134,12 @@ function init(){
 	var axesHelper = new THREE.AxesHelper( 5000 );
 	scene.add( axesHelper );
 
-
-
-	//INIT SKYBOX
-	//Init cube textrues
-	cubeLoader_blood_valley = new THREE.CubeTextureLoader();
-	cubeLoader_blood_valley.setPath( 'img/skybox/blood-valley/' );
-	blood_valley = cubeLoader_blood_valley.load( [
-	'ft.png', 'bk.png',
-	'up.png', 'dn.png',
-	'rt.png', 'lf.png'
-	] );
-	
-	cubeLoader_castle = new THREE.CubeTextureLoader();
-	cubeLoader_castle.setPath( 'img/skybox/castle/' );
-	castle = cubeLoader_castle.load( [
-	'ft.png', 'bk.png',
-	'up.png', 'dn.png',
-	'rt.png', 'lf.png'
-	] );
-
-	cubeLoader_city = new THREE.CubeTextureLoader();
-	cubeLoader_city.setPath( 'img/skybox/city/' );
-	city = cubeLoader_city.load( [
-	'ft.png', 'bk.png',
-	'up.png', 'dn.png',
-	'rt.png', 'lf.png'
-	] );
-
-	scene.background = blood_valley;//default theme
-
-
-	//INIT TEAPOT
-	//init colors
-	materialColor = new THREE.Color();
-	materialColor.setRGB( 1, 1, 1 );
-	specularColor = new THREE.Color();
-	specularColor.setRGB( 1, 1, 1 );
-
-
 	//init textures
-
 	generatePerlinTexture();
+	materialColor = new THREE.Color( 0xffffff );
 
 	//INIT TEAPOT
 	teapotGeo = new THREE.TeapotBufferGeometry( teapotSize, teapotSegmentNum, true, true, true, false, true );
-	//init textures
-	teapotTexture = new THREE.TextureLoader().load( 'img/fern.png' );
-	teapotTexture.wrapS = teapotTexture.wrapT = THREE.RepeatWrapping;
-	teapotTexture.anisotropy = 21;
-	specularMap = new THREE.TextureLoader().load( 'img/fern_specular_map.png' );
-	specularMap.wrapS = specularMap.wrapT = THREE.RepeatWrapping;
-	specularMap.anisotropy = 21;
-	displacementMap = new THREE.TextureLoader().load( 'img/fern_displacement_map.png' );
-	displacementMap.wrapS = displacementMap.wrapT = THREE.RepeatWrapping;
-	displacementMap.anisotropy = 21;
-	displacementMap.roughness = 0;
-	bumpMap = new THREE.TextureLoader().load( 'img/fern_bump_map.png' );
-	bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
-	bumpMap.anisotropy = 21;
-	bumpMap.roughness = 0;
 	//END OF INIT TEAPOT
 
 
@@ -218,8 +172,7 @@ function init(){
 	//attach info
 	info = document.createElement('div');
     info.style.position = 'absolute';
-    info.style.top = '5px';
-    info.style.left = '50px';
+    info.style.top = '3px';
     info.style.width = '100%';
     info.style.textAlign = 'center';
     info.style.color = "lightblue";
@@ -244,27 +197,12 @@ function initGUI(){
 		this.spotLightXPosition = 0;
 		this.spotLightZPosition = 90;
 		this.spotLightLightness = 0.5;
-		this.spotLightAngle = 60;
+		this.spotLightAngle = 180;
 	}
 
 	teapotControllers = new function(){
-		this.showFlatShading = false;
 		this.showteapotDecal = true;
 		this.segmentNum = 10;
-
-		this.showSpecular = false;
-		this.shininess = 30;
-		this.specularColor = 0xFFFFFF;
-
-		this.showDisplacement = false;
-		this.displacementScale = 0;
-
-		this.showBump = false;		
-		this.bumpScale = 0;
-
-		this.showCube = false;
-		this.envMapping = false;
-		this.skyboxTheme = 'blood_valley';
 
 		this.noiseSize = 9;
 		this.noiseTextureTurbulence = 0.005;
@@ -310,39 +248,34 @@ function initGUI(){
 			selectedShape = value;
 			if (selectedShape == 'teapot') {
 				planeCtrl.domElement.style.display = 'none';
-				teapotCtrl.domElement.style.display = '';
+
+				teapotMaterialControl.domElement.style.display = '';//default
+				teapotNoiseControl.domElement.style.display = '';//default
 				initCamera();
 			} else if (selectedShape == 'plane') {
 				planeCtrl.domElement.style.display = '';
-				teapotCtrl.domElement.style.display = 'none';
+
+				teapotMaterialControl.domElement.style.display = 'none';//default
+				teapotNoiseControl.domElement.style.display = 'none';//default
 				initCamera();
 			}
 			render();
 		});
 
-	//refreshBtn
-	// refreshBtn = { add:function(){
-	// 	noise.seed(Math.random());
-	// 	render();
-	// } };
-	// gui.add(refreshBtn, "add").name("Refresh");
-
 	//Light teapotControllers
 	controllersForLights();
 
 	//Folders to different shapes
-	teapotCtrl = gui.addFolder("Teapot Controllers");
 	planeCtrl = gui.addFolder("Plane Controllers");
 
 	//Controllers for the teapot
 	controllersForTeapot();
 	//Controllers for the plane
 	controllersForPlane();
-	//Controllers for the skybox
-	controllersForSkybox();
 
 	//default display the plane so omit the rest
-	teapotCtrl.domElement.style.display = 'none';//default
+	teapotMaterialControl.domElement.style.display = 'none';//default
+	teapotNoiseControl.domElement.style.display = 'none';//default
 	
 }
 
@@ -354,7 +287,6 @@ function initCamera(){
 		cameraControls.addEventListener( 'change', render );
 	} else if (selectedShape == 'plane'){
 		camera.position.set( 0, 100, 1000 );
-		// TODO to delete below
 		var cameraControls = new THREE.OrbitControls( camera, renderer.domElement );
 		cameraControls.addEventListener( 'change', render );
 	}
@@ -373,29 +305,14 @@ function controllersForLights(){
 }
 
 function controllersForTeapot(){
-	teapotMaterialControl = teapotCtrl.addFolder("Teapot Materials");
-	// teapotMaterialControl.add(teapotControllers, "showPhongShading", true, false).name("Show Phong Shading").onChange(render);
-	teapotMaterialControl.add(teapotControllers, "showFlatShading", true, false).name("Show Flat Shading").onChange(render);
+	teapotMaterialControl = gui.addFolder("Teapot Materials");
 	teapotMaterialControl.add(teapotControllers, "showteapotDecal", true, false).name("Show shape Decal").onChange(render);
 	teapotMaterialControl.add(teapotControllers, "segmentNum", 1, 210).name("Number of Segment").onChange(function(){
 		teapotGeo = new THREE.TeapotBufferGeometry( teapotSize, teapotControllers.segmentNum, true, true, true, false, true );
 		render();
 	})
 
-	teapotSpecularControl = teapotCtrl.addFolder("Teapot Specular");
-	specularCtrl = teapotSpecularControl.add(teapotControllers, "showSpecular", true, false).name("Show Specular").onChange(render);
-	teapotSpecularControl.add(teapotControllers, "shininess", 1, 10000).name("Shininess").onChange(render);
-	teapotSpecularControl.addColor(teapotControllers, 'specularColor').name('Specular Color').onChange(render);
-
-	teapotDisplacementControl = teapotCtrl.addFolder("Teapot Displacement");
-	displacementCtrl = teapotDisplacementControl.add(teapotControllers, "showDisplacement", true, false).name("Show Displacement").onChange(render);
-	teapotDisplacementControl.add(teapotControllers, "displacementScale", 0, 30).name("Displacement Scale").onChange(render);
-
-	teapotBumpControl = teapotCtrl.addFolder("Teapot Bump");
-	bumpCtrl = teapotBumpControl.add(teapotControllers, "showBump", true, false).name("Show Bump").onChange(render);
-	teapotBumpControl.add(teapotControllers, "bumpScale", 0, 1).name("Bump Scale").onChange(render);
-
-	teapotNoiseControl = teapotCtrl.addFolder("Perlin Noise Control");
+	teapotNoiseControl = gui.addFolder("Perlin Noise Control");
 	teapotNoiseControl.add(teapotControllers, "noiseSize", 7, 11).listen().name("Noise Size").onChange(
 		function(value){
 			value = Math.round(value);//round up number
@@ -403,7 +320,6 @@ function controllersForTeapot(){
 			value = Math.pow(2, value);// then operate data
 			noiseTextureWidth = value;
 			noiseTextureHeight = value;
-			console.log(value);
 			generatePerlinTexture();
 			render();
 		});
@@ -474,7 +390,7 @@ function controllersForPlane(){
 			render();
 		});
 
-	planeCtrl.add(planeControllers, "planeWidth", 88, 120).listen().name("Map Width").onChange(
+	planeCtrl.add(planeControllers, "planeWidth", 88, 510).listen().name("Map Width").onChange(
 		function(value){
 			value = Math.round(value);
 			if (value%2 != 0) {
@@ -489,7 +405,7 @@ function controllersForPlane(){
 			render();
 		});
 
-	planeCtrl.add(planeControllers, "planeHeight", 21, 120).listen().name("Map Height").onChange(
+	planeCtrl.add(planeControllers, "planeHeight", 21, 510).listen().name("Map Height").onChange(
 		function(value){
 			value = Math.round(value);//round up number
 			if (value%2 != 0) {
@@ -515,7 +431,7 @@ function controllersForPlane(){
 			worldTexture.needsUpdate = true;
 			render();
 		});
-	planeCtrl.add(planeControllers, "planeZCoordinateScale", 1, 500).listen().name("Z Axis Scale").onChange(
+	planeCtrl.add(planeControllers, "planeZCoordinateScale", 1, 21).listen().name("Z Axis Scale").onChange(
 		function(value){
 			// value = Math.round(value);
 			planeControllers.planeZCoordinateScale = value;
@@ -623,70 +539,20 @@ function controllersForPlane(){
 		});
 }
 
-function controllersForSkybox(){
-	skybBoxControl = gui.addFolder("Sky Box and IBL");
-	skybBoxControl.add(teapotControllers, "showCube", true, false).name("Show Sky Box").onChange(render);
-	skybBoxControl.add(teapotControllers, "envMapping", true, false).name("Environment Lighting").onChange(render);
-	skybBoxControl
-	.add(
-		teapotControllers, 
-		"skyboxTheme", 
-		{
-			"Blood Valley" : "blood_valley", 
-			"Castle" : "castle", 
-			"City" : "city"
-		})
-	.name("Skybox Theme")
-	.onChange(
-		function(value){
-			selectedTheme = value;
-			render();
-		});
-}
-
 
 function render() {
-
-	// =========   Skybox Render   =========
-
-	//theme selection
-	currTheme = blood_valley;
-	if (selectedTheme == "blood_valley") {
-		currTheme = blood_valley;``
-	}else if (selectedTheme == "castle") {
-		currTheme = castle;
-	} else if (selectedTheme == "city") {
-		currTheme = city
-	}else {
-		throw new Error('404: Theme not found!');
-	}
-
-	if (teapotControllers.showCube) {
-		scene.background = currTheme;
-		envMap = currTheme;
-		if (!teapotControllers.envMapping) {
-			envMap = null;
-		}
-	}else{
-		envMap = null;
-		scene.background = new THREE.Color( 0x00000 );
-	}
-
-	// =========   End of Skybox Render   =========
 	
-
 	// =========   Shape Switcher   =========
 	//Shape selection
 	scene.remove( shape );
 	if (selectedShape == 'teapot') {
-		phongMaterial = new THREE.MeshPhongMaterial( { color: materialColor, envMap: envMap, side: THREE.DoubleSide} );
-		phongMaterial.combine = THREE.AddOperation;
+		phongMaterial = new THREE.MeshPhongMaterial( { color: materialColor, side: THREE.DoubleSide} );
 		geo = teapotGeo;
 		renderTeapot();
 		shape = new THREE.Mesh(geo, phongMaterial);
 	} else if (selectedShape == 'plane') {
 		renderPlane();
-		shape.rotation.x = -39 * Math.PI/180;
+		shape.rotation.x = planeAngle * Math.PI/180;
 	} else{
 		throw new Error('404: Shape not found!');
 	}
@@ -734,48 +600,12 @@ function render() {
 
 function renderTeapot(){
 
-	specularColor.set(teapotControllers.specularColor);
-
 	//Shape Decal trigger
 	if (teapotControllers.showteapotDecal){
 		phongMaterial.map = perlinTexture;
 	}else{
 		phongMaterial.map = null;
 	}
-
-	//Displacement trigger
-	if (teapotControllers.showDisplacement){
-		phongMaterial.displacementMap = displacementMap;
-		phongMaterial.displacementScale = teapotControllers.displacementScale;
-	}else{
-		phongMaterial.displacementMap = null;
-		phongMaterial.displacementScale = 0;
-	}
-
-
-	//Bump trigger
-	if (teapotControllers.showBump){
-		phongMaterial.bumpMap = bumpMap;
-		phongMaterial.bumpScale = teapotControllers.bumpScale;
-	}else{
-		phongMaterial.bumpMap = null;
-		phongMaterial.bumpScale = 0;
-	}
-
-
-	// Specular
-	if (teapotControllers.showSpecular){
-		phongMaterial.specularMap = specularMap;
-		phongMaterial.specular = specularColor;
-		phongMaterial.shininess = teapotControllers.shininess;
-	}else{
-		phongMaterial.specularMap = null;
-		phongMaterial.shininess = 0;
-	}
-
-
-	//flat shading
-	phongMaterial.flatShading = teapotControllers.showFlatShading;
 
 }
 
@@ -795,7 +625,7 @@ function renderPlane(){
 		shape = new THREE.LineSegments( wireframe, mat );
 		shape.material.depthTest = false;
 		shape.material.opacity = 0.25;
-		shape.rotation.x = -39 * Math.PI/180;
+		shape.rotation.x = planeAngle * Math.PI/180;
 	} else {
 		throw new Error("Unsupported material!");
 	}
@@ -811,7 +641,7 @@ function createPlane(){
 		planeZs[y] = planeRow;
 		var xoff = 0;// offset of x
 		for (var x = 0; x < planeWidth; x ++) {
-			planeZs[y][x] = Math.abs(noise.perlin3(xoff, yoff, animateTime)) * planeZCoordinateScale;//Math.random(10) * 100;
+			planeZs[y][x] = Math.abs(noise.perlin3(xoff, yoff, animateTime)) * planeZCoordinateScale * planeScale;//random generate z axis for each vertix
 			xoff += planeZCoordinateTurbulence;
 		}
 		yoff += planeZCoordinateTurbulence;
